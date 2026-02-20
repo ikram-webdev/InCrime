@@ -3,15 +3,14 @@ import axios from 'axios';
 
 const AuthContext = createContext();
 
-// Axios default base URL
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'https://incrime-server.onrender.com';
+// 1. Base URL fix (Make sure it ends with /api)
+axios.defaults.baseURL = 'https://incrime-server.onrender.com'; 
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('incrime_token') || null);
   const [loading, setLoading] = useState(true);
 
-  // Set axios auth header whenever token changes
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -26,31 +25,41 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await axios.get('/api/auth/me');
       if (data.success) setUser(data.user);
-    } catch {
+    } catch (err) {
       logout();
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (username, password) => {
-    const { data } = await axios.post('/api/auth/login', { username, password });
-    if (data.success) {
-      localStorage.setItem('incrime_token', data.token);
-      setToken(data.token);
-      setUser(data.user);
+  const login = async (email, password) => {
+    try {
+      // 2. Login request handling with error catch
+      const { data } = await axios.post('/api/auth/login', { email, password });
+      if (data.success) {
+        localStorage.setItem('incrime_token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+      }
+      return data;
+    } catch (error) {
+      // Throw error taake Login page par error message dikhayi de
+      throw error.response ? error.response.data : new Error("Server Error");
     }
-    return data;
   };
 
   const register = async (formData) => {
-    const { data } = await axios.post('/api/auth/register', formData);
-    if (data.success) {
-      localStorage.setItem('incrime_token', data.token);
-      setToken(data.token);
-      setUser(data.user);
+    try {
+      const { data } = await axios.post('/api/auth/register', formData);
+      if (data.success) {
+        localStorage.setItem('incrime_token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+      }
+      return data;
+    } catch (error) {
+      throw error.response ? error.response.data : new Error("Registration Failed");
     }
-    return data;
   };
 
   const logout = () => {
@@ -60,18 +69,11 @@ export function AuthProvider({ children }) {
     delete axios.defaults.headers.common['Authorization'];
   };
 
-  const isAdmin = user?.role === 'admin';
-  const isAuthenticated = !!user;
-
   return (
-    <AuthContext.Provider value={{ user, token, loading, isAuthenticated, isAdmin, login, register, logout }}>
-      {children}
+    <AuthContext.Provider value={{ user, token, loading, isAuthenticated: !!user, isAdmin: user?.role === 'admin', login, register, logout }}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be inside AuthProvider');
-  return ctx;
-};
+export const useAuth = () => useContext(AuthContext);
